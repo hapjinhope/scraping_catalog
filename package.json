@@ -1,0 +1,15 @@
+{
+  "name": "cian-parser",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/scrape.js",
+    "scrape": "node src/scrape.js",
+    "scrape:avito": "node src/scrape.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.83.0",
+    "dotenv": "^17.2.3",
+    "playwright": "^1.48.2"
+  }
+}
