@@ -73,6 +73,21 @@ async function waitForResultsAvito(page, selector = AVITO_CARD_SELECTOR) {
   await humanScroll(page);
 }
 
+async function dumpPageState(page, label = 'PAGE') {
+  try {
+    const url = page.url();
+    const title = await page.title();
+    const bodyText = await page.$eval('body', (el) => el.innerText || '').catch(() => '');
+    log('warn', `${label} состояние: ${url} | ${title}`);
+    if (bodyText) {
+      const snippet = bodyText.replace(/\s+/g, ' ').slice(0, 500);
+      log('warn', `${label} текст (обрезано): ${snippet}`);
+    }
+  } catch {
+    // ignore diagnostics failures
+  }
+}
+
 async function autoScroll(page, targetCount = 60, selector = CARD_SELECTOR) {
   let previousHeight = 0;
   for (let i = 0; i < 40; i += 1) {
@@ -451,6 +466,7 @@ async function runAvito() {
       await waitForResultsAvito(page, AVITO_CARD_SELECTOR);
     } catch (err) {
       collectedErrors.push(`Не дождался карточек на Avito (страница ${pageIndex}): ${err.message}`);
+      await dumpPageState(page, 'AVITO');
       break;
     }
     log('info', `AVITO: страница ${pageIndex}: скроллю и собираю...`);
