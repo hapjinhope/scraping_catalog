@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node src/scrape.js",
     "scrape": "node src/scrape.js",
-    "scrape:avito": "node src/scrape.js"
+    "scrape:avito": "node src/scrape.js",
+    "postinstall": "npx playwright install chromium"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.83.0",

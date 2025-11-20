@@ -22,7 +22,7 @@ npm start
 
 ## Railway / Cron
 1. Задайте переменные окружения (см. выше). Для Railway обычно `SAVE_LOCAL=false`, `HEADLESS=true`.
-2. Установите браузер на билде (один раз): `npx playwright install chromium`.
+2. Браузер подтягивается автоматически через `npm install` (скрипт `postinstall` = `npx playwright install chromium`). Если нужно руками: `npx playwright install chromium`.
 3. Команда запуска: `npm start` (или `node src/scrape.js`).
 4. Настройте Cron в Railway на эту команду — процесс сам завершится после парсинга.
 
@@ -30,4 +30,3 @@ npm start
 - Эмодзи-логирование, выводит добавленные ссылки.
 - При `SAVE_LOCAL=true` пишет файлы: `data/results.json`, `data/results_avito.json`, `data/page_stats*.json`, скриншоты в `data/screenshots/`.
 - При пустых результатах выводит только релевантные ошибки (те, что помешали собрать ссылки).
-
