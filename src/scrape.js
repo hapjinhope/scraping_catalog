@@ -272,7 +272,9 @@ async function pushLinksToSupabase(source, links) {
   const chunkSize = 100;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
-    const { error } = await supabase.from('owners').insert(chunk);
+    const { error } = await supabase
+      .from('owners')
+      .upsert(chunk, { onConflict: 'url', ignoreDuplicates: true });
     if (error) {
       log('err', `${source}: ошибка Supabase insert: ${error.message}`);
       return;
