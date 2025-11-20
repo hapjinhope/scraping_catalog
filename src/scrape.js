@@ -269,18 +269,34 @@ async function pushLinksToSupabase(source, links) {
     log('warn', `${source}: нечего отправлять в Supabase.`);
     return;
   }
+
+  // Если в базе нет уникального индекса, onConflict падает. Фильтруем вручную.
+  const urls = rows.map((r) => r.url);
+  const { data: existing, error: selErr } = await supabase
+    .from('owners')
+    .select('url')
+    .in('url', urls);
+  if (selErr) {
+    log('err', `${source}: ошибка Supabase select: ${selErr.message}`);
+    return;
+  }
+  const existingSet = new Set(existing?.map((r) => r.url) || []);
+  const newRows = rows.filter((r) => !existingSet.has(r.url));
+  if (!newRows.length) {
+    log('info', `${source}: все ссылки уже есть в Supabase.`);
+    return;
+  }
+
   const chunkSize = 100;
-  for (let i = 0; i < rows.length; i += chunkSize) {
-    const chunk = rows.slice(i, i + chunkSize);
-    const { error } = await supabase
-      .from('owners')
-      .upsert(chunk, { onConflict: 'url', ignoreDuplicates: true });
+  for (let i = 0; i < newRows.length; i += chunkSize) {
+    const chunk = newRows.slice(i, i + chunkSize);
+    const { error } = await supabase.from('owners').insert(chunk);
     if (error) {
       log('err', `${source}: ошибка Supabase insert: ${error.message}`);
       return;
     }
   }
-  log('ok', `${source}: отправлено в Supabase ${rows.length} ссылок`);
+  log('ok', `${source}: отправлено в Supabase ${newRows.length} новых ссылок (всего собрали ${rows.length})`);
 }
 
 async function runCian() {
