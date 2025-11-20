@@ -447,7 +447,12 @@ async function runAvito() {
 
   while (pageIndex <= targetPages) {
     log('info', `AVITO: страница ${pageIndex}: жду карточки...`);
-    await waitForResultsAvito(page, AVITO_CARD_SELECTOR);
+    try {
+      await waitForResultsAvito(page, AVITO_CARD_SELECTOR);
+    } catch (err) {
+      collectedErrors.push(`Не дождался карточек на Avito (страница ${pageIndex}): ${err.message}`);
+      break;
+    }
     log('info', `AVITO: страница ${pageIndex}: скроллю и собираю...`);
     await autoScroll(page, perPageTarget, AVITO_CARD_SELECTOR);
     if (SAVE_LOCAL) {
