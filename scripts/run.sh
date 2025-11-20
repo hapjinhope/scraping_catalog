@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run scraper (зависимости уже устанавливаются на этапе build)
+# Ensure system deps for Playwright Chromium are present in runtime
+npx playwright install-deps chromium
+
+# Run scraper
 node src/scrape.js
