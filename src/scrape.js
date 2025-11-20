@@ -230,6 +230,10 @@ function randomPause(min = 200, max = 800) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function log(kind, message) {
   const icons = {
     start: '🚀',
@@ -315,7 +319,7 @@ async function runCian() {
     locale: 'ru-RU',
     timezoneId: 'Europe/Moscow',
     userAgent:
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.70 Safari/537.36',
     extraHTTPHeaders: {
       'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
     }
@@ -454,7 +458,7 @@ async function runAvito() {
     locale: 'ru-RU',
     timezoneId: 'Europe/Moscow',
     userAgent:
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.70 Safari/537.36',
     extraHTTPHeaders: {
       'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
     }
@@ -466,10 +470,20 @@ async function runAvito() {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
   });
 
+  // Стартуем с главной, чтобы меньше палиться, затем идём на выдачу.
+  log('info', 'AVITO: открываю главную...');
+  await page.goto('https://www.avito.ru/', { waitUntil: 'domcontentloaded', timeout: 120000 }).catch((err) => {
+    throw new Error(`Не удалось открыть главную Avito: ${err.message}`);
+  });
+  await humanScroll(page);
+  await sleep(randomPause(800, 1800));
+
   log('info', `AVITO: открываю ленту (мин. цена ${MIN_PRICE})...`);
   await page.goto(AVITO_SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 120000 }).catch((err) => {
     throw new Error(`Не удалось открыть страницу: ${err.message}`);
   });
+  await sleep(randomPause(600, 1400));
+  await humanScroll(page);
 
   const seen = new Set();
   const allCards = [];
