@@ -18,7 +18,7 @@ const SEARCH_URL =
 const CIAN_SEARCH_URL = SEARCH_URL;
 const AVITO_SEARCH_URL =
   process.env.AVITO_URL ||
-  `https://www.avito.ru/moskva/kvartiry/sdam/na_dlitelnyy_srok?user=1&pmin=${MIN_PRICE}&s=104`;
+  `https://www.avito.ru/moskva/kvartiry/sdam/na_dlitelnyy_srok-ASgBAgICAkSSA8gQ8AeQUg?f=ASgBAgECAkSSA8gQ8AeQUgFFxpoMFnsiZnJvbSI6${MIN_PRICE},%22to%22:0}&s=104&user=1`;
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const OUTPUT_FILE = path.join(DATA_DIR, 'results.json');
