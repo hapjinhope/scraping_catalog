@@ -39,6 +39,8 @@ const AVITO_PAGE = Number(process.env.AVITO_PAGE || 0);
 const ITEMS_LIMIT = Number(process.env.ITEMS_LIMIT || 5); // общий лимит для первой страницы, если не идём по всем
 const SAVE_LOCAL = envBool('SAVE_LOCAL', false);
 const HEADLESS = envBool('HEADLESS', true);
+const AVITO_PROXY = process.env.AVITO_PROXY || process.env.PROXY_URL || '';
+const AVITO_STATE_PATH = path.join(DATA_DIR, 'avito_state.json');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -448,9 +450,18 @@ async function runAvito() {
   const pageSummaries = [];
   const chromePath = await getChromePath();
   log('start', 'AVITO: запускаю браузер...');
+  const proxy = AVITO_PROXY ? { server: AVITO_PROXY } : undefined;
+  await fs.mkdir(DATA_DIR, { recursive: true }).catch(() => {});
+  const stateExists = await fs
+    .access(AVITO_STATE_PATH)
+    .then(() => true)
+    .catch(() => false);
+
   const browser = await chromium.launch({
     headless: HEADLESS,
-    executablePath: chromePath
+    executablePath: chromePath,
+    args: ['--disable-blink-features=AutomationControlled'],
+    proxy
   });
 
   const context = await browser.newContext({
@@ -461,7 +472,8 @@ async function runAvito() {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.70 Safari/537.36',
     extraHTTPHeaders: {
       'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
-    }
+    },
+    storageState: stateExists ? AVITO_STATE_PATH : undefined
   });
 
   const page = await context.newPage();
@@ -567,6 +579,7 @@ async function runAvito() {
   await pushLinksToSupabase('AVITO', links);
   await browser.close();
   log('ok', 'AVITO: браузер закрыт.');
+  await context.storageState({ path: AVITO_STATE_PATH }).catch(() => {});
 
   return {
     logSummary: `AVITO итого: ${allCards.length} ссылок, страниц ${pageSummaries.length}`
