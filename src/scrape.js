@@ -39,6 +39,7 @@ const AVITO_PAGE = Number(process.env.AVITO_PAGE || 0);
 const ITEMS_LIMIT = Number(process.env.ITEMS_LIMIT || 5); // общий лимит для первой страницы, если не идём по всем
 const SAVE_LOCAL = envBool('SAVE_LOCAL', false);
 const HEADLESS = envBool('HEADLESS', true);
+const SAVE_TO_DB = envBool('SAVE_TO_DB', true);
 const AVITO_PROXY = process.env.AVITO_PROXY || process.env.PROXY_URL || '';
 const AVITO_STATE_PATH = path.join(DATA_DIR, 'avito_state.json');
 
@@ -267,8 +268,8 @@ async function humanScroll(page) {
 }
 
 async function pushLinksToSupabase(source, links) {
-  if (DISABLE_SUPABASE) {
-    log('info', `${source}: Supabase выключен (DISABLE_SUPABASE=true). Пропускаю выгрузку.`);
+  if (DISABLE_SUPABASE || !SAVE_TO_DB) {
+    log('info', `${source}: Supabase выключен (DISABLE_SUPABASE=true или SAVE_TO_DB=false). Пропускаю выгрузку.`);
     return;
   }
   if (!supabase) {
