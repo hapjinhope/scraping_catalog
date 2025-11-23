@@ -61,6 +61,36 @@ async function waitForResultsAvito(page, selector = AVITO_CARD_SELECTOR) {
   await humanScroll(page);
 }
 
+async function tryBypassBlock(page) {
+  const text = await page.$eval('body', (el) => el.innerText || '').catch(() => '');
+  const looksBlocked = /Доступ ограничен|проблема с IP|captcha/i.test(text || '');
+  if (!looksBlocked) return false;
+
+  const stamp = Date.now();
+  if (SAVE_LOCAL) {
+    await fs.mkdir(SHOTS_DIR, { recursive: true }).catch(() => {});
+    const shot = path.join(SHOTS_DIR, `avito_mobile_block_${stamp}.png`);
+    await page.screenshot({ path: shot, fullPage: true }).catch(() => {});
+    log('warn', `AVITO mobile: блок, скриншот ${shot}`);
+  }
+
+  const btn = page.getByRole('button', { name: /Продолжить/i });
+  const hasBtn = (await btn.count().catch(() => 0)) > 0;
+  if (hasBtn) {
+    log('info', 'AVITO mobile: жму "Продолжить" на блок-странице...');
+    await btn.first().click({ timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(randomPause(1500, 2500));
+    if (SAVE_LOCAL) {
+      const shotAfter = path.join(SHOTS_DIR, `avito_mobile_after_continue_${stamp}.png`);
+      await page.screenshot({ path: shotAfter, fullPage: true }).catch(() => {});
+      log('info', `AVITO mobile: скрин после нажатия -> ${shotAfter}`);
+    }
+    return true;
+  }
+
+  return false;
+}
+
 async function collectAvitoCards(page) {
   const items = await page.$$eval(AVITO_CARD_SELECTOR, (cards) =>
     cards.map((card) => {
@@ -174,6 +204,7 @@ async function main() {
   log('info', `AVITO mobile: открываю ленту...`);
   await page.goto(mobileUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(randomPause(600, 1200));
+  await tryBypassBlock(page);
 
   let cards;
   try {
