@@ -40,6 +40,7 @@ const ITEMS_LIMIT = Number(process.env.ITEMS_LIMIT || 5); // общий лими
 const SAVE_LOCAL = envBool('SAVE_LOCAL', false);
 const HEADLESS = envBool('HEADLESS', true);
 const SAVE_TO_DB = envBool('SAVE_TO_DB', true);
+const AVITO_COOKIES_ID = Number(process.env.AVITO_COOKIES_ID || 1);
 const AVITO_PROXY = process.env.AVITO_PROXY || process.env.PROXY_URL || '';
 const AVITO_STATE_PATH = path.join(DATA_DIR, 'avito_state.json');
 
