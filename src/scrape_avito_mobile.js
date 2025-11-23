@@ -20,6 +20,8 @@ const AVITO_URL =
 const DATA_DIR = path.join(process.cwd(), 'data');
 const SHOTS_DIR = path.join(DATA_DIR, 'screenshots');
 const AVITO_CARD_SELECTOR = '[data-marker="item"]';
+const OUTPUT_AVITO_MOBILE = path.join(DATA_DIR, 'results_avito_mobile.json');
+const STATS_AVITO_MOBILE = path.join(DATA_DIR, 'page_stats_avito_mobile.json');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -195,6 +197,13 @@ async function main() {
   const links = cards.map((c) => c.link).filter(Boolean);
   log('ok', `AVITO mobile: собрано ${cards.length} объявлений`);
   links.forEach((l) => log('info', `🔗 ${l}`));
+  if (SAVE_LOCAL) {
+    await fs.mkdir(DATA_DIR, { recursive: true }).catch(() => {});
+    await fs.writeFile(OUTPUT_AVITO_MOBILE, JSON.stringify(cards, null, 2), 'utf8');
+    const stats = { totalLinks: cards.length, pagesVisited: 1 };
+    await fs.writeFile(STATS_AVITO_MOBILE, JSON.stringify(stats, null, 2), 'utf8');
+    log('ok', `AVITO mobile: сохранено ${cards.length} объявлений -> ${OUTPUT_AVITO_MOBILE}`);
+  }
   await pushLinksToSupabase('AVITO mobile', links);
   await browser.close();
   log('ok', 'AVITO mobile: браузер закрыт.');
