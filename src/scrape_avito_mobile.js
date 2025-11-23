@@ -25,7 +25,6 @@ const STATS_AVITO_MOBILE = path.join(DATA_DIR, 'page_stats_avito_mobile.json');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const DISABLE_SUPABASE = envBool('DISABLE_SUPABASE', false);
 const supabase =
   SUPABASE_URL && SUPABASE_KEY
     ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
@@ -137,10 +136,6 @@ async function collectAvitoCards(page) {
 }
 
 async function pushLinksToSupabase(source, links) {
-  if (DISABLE_SUPABASE) {
-    log('info', `${source}: Supabase выключен (DISABLE_SUPABASE=true). Пропускаю.`);
-    return;
-  }
   if (!supabase) {
     log('info', `${source}: Supabase не настроен, пропускаю.`);
     return;

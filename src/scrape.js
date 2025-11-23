@@ -45,7 +45,6 @@ const AVITO_STATE_PATH = path.join(DATA_DIR, 'avito_state.json');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const DISABLE_SUPABASE = envBool('DISABLE_SUPABASE', false);
 const supabase =
   SUPABASE_URL && SUPABASE_KEY
     ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
@@ -268,8 +267,8 @@ async function humanScroll(page) {
 }
 
 async function pushLinksToSupabase(source, links) {
-  if (DISABLE_SUPABASE || !SAVE_TO_DB) {
-    log('info', `${source}: Supabase выключен (DISABLE_SUPABASE=true или SAVE_TO_DB=false). Пропускаю выгрузку.`);
+  if (!SAVE_TO_DB) {
+    log('info', `${source}: Supabase выключен (SAVE_TO_DB=false). Пропускаю выгрузку.`);
     return;
   }
   if (!supabase) {
