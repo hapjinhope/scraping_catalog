@@ -18,7 +18,7 @@ const SEARCH_URL =
 const CIAN_SEARCH_URL = SEARCH_URL;
 const AVITO_SEARCH_URL =
   process.env.AVITO_URL ||
-  `https://www.avito.ru/moskva/kvartiry/sdam/na_dlitelnyy_srok-ASgBAgICAkSSA8gQ8AeQUg?f=ASgBAgECAkSSA8gQ8AeQUgFFxpoMFnsiZnJvbSI6${MIN_PRICE},%22to%22:0}&s=104&user=1`;
+  `https://www.avito.ru/moskva/kvartiry/sdam/na_dlitelnyy_srok?pmin=${MIN_PRICE}&user=1&s=104`;
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const OUTPUT_FILE = path.join(DATA_DIR, 'results.json');
@@ -499,6 +499,18 @@ async function runAvito() {
   await page.goto(AVITO_SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 120000 }).catch((err) => {
     throw new Error(`Не удалось открыть страницу: ${err.message}`);
   });
+  // Страхуем применение фильтра min price, если Avito сбросил параметр.
+  const priceInput = await page.$('input[name="pmin"]').catch(() => null);
+  if (priceInput) {
+    const current = await priceInput.inputValue().catch(() => '');
+    const numeric = parseInt(current.replace(/\D+/g, ''), 10) || 0;
+    if (numeric !== MIN_PRICE) {
+      await priceInput.fill(String(MIN_PRICE));
+      await priceInput.press('Enter').catch(() => {});
+      await page.waitForLoadState('domcontentloaded');
+      await sleep(randomPause(600, 1200));
+    }
+  }
   await sleep(randomPause(600, 1400));
   await humanScroll(page);
 
