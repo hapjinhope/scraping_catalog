@@ -40,7 +40,7 @@ const ITEMS_LIMIT = Number(process.env.ITEMS_LIMIT || 5); // общий лими
 const SAVE_LOCAL = envBool('SAVE_LOCAL', false);
 const HEADLESS = envBool('HEADLESS', true);
 const SAVE_TO_DB = envBool('SAVE_TO_DB', true);
-const AVITO_COOKIES_ID = Number(process.env.AVITO_COOKIES_ID || 1);
+const AVITO_COOKIES_PROFILE = process.env.AVITO_COOKIES_PROFILE || "main";
 const AVITO_PROXY = process.env.AVITO_PROXY || process.env.PROXY_URL || '';
 const AVITO_STATE_PATH = path.join(DATA_DIR, 'avito_state.json');
 
@@ -321,7 +321,8 @@ async function fetchAvitoCookies() {
   const { data, error } = await supabase
     .from('avito_cookies')
     .select('cookies')
-    .eq('id', AVITO_COOKIES_ID)
+    .eq('profile_name', AVITO_COOKIES_PROFILE)
+    .eq('blocked', false)
     .maybeSingle();
   if (error) {
     log('err', `AVITO: ошибка чтения cookies: ${error.message}`);
@@ -332,8 +333,8 @@ async function fetchAvitoCookies() {
 
 async function saveAvitoCookies(cookies, blocked) {
   if (!supabase || !SAVE_TO_DB) return;
-  const payload = { id: AVITO_COOKIES_ID, cookies, blocked: !!blocked };
-  const { error } = await supabase.from('avito_cookies').upsert(payload, { onConflict: 'id' });
+  const payload = { profile_name: AVITO_COOKIES_PROFILE, cookies, blocked: !!blocked };
+  const { error } = await supabase.from('avito_cookies').upsert(payload, { onConflict: 'profile_name' });
   if (error) {
     log('err', `AVITO: ошибка записи cookies: ${error.message}`);
   }
