@@ -279,13 +279,26 @@ async function pushLinksToSupabase(source, links) {
     log('info', `${source}: Supabase не настроен, пропускаю выгрузку.`);
     return;
   }
-  const rows = links.filter(Boolean).map((url) => ({ url, parsed: false }));
+  // Убираем локальные дубли.
+  const uniq = Array.from(new Set(links.filter(Boolean)));
+  const rows = uniq.map((url) => ({ url, parsed: false }));
   if (!rows.length) {
     log('warn', `${source}: нечего отправлять в Supabase.`);
     return;
   }
 
-  // Если в базе нет уникального индекса, onConflict падает. Фильтруем вручную.
+  // Сначала пытаемся upsert по url (если есть уникальный индекс).
+  const { error: upsertErr } = await supabase
+    .from('owners')
+    .upsert(rows, { onConflict: 'url', ignoreDuplicates: true });
+
+  if (!upsertErr) {
+    log('ok', `${source}: отправлено в Supabase ${rows.length} ссылок (onConflict url)`);
+    return;
+  }
+
+  // Фоллбек, если нет уникального индекса: фильтруем вручную и вставляем только новые.
+  log('warn', `${source}: upsert без индекса url не сработал (${upsertErr.message}), пробую через select+insert.`);
   const urls = rows.map((r) => r.url);
   const { data: existing, error: selErr } = await supabase
     .from('owners')
@@ -296,11 +309,6 @@ async function pushLinksToSupabase(source, links) {
     return;
   }
   const existingSet = new Set(existing?.map((r) => r.url) || []);
-  const duplicates = rows.filter((r) => existingSet.has(r.url));
-  if (duplicates.length) {
-    const sample = duplicates.slice(0, 3).map((r) => r.url).join('\n');
-    log('info', `${source}: уже есть в БД ${duplicates.length} ссылок, пропускаю. Примеры:\n${sample}`);
-  }
   const newRows = rows.filter((r) => !existingSet.has(r.url));
   if (!newRows.length) {
     log('info', `${source}: все ссылки уже есть в Supabase.`);
