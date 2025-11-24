@@ -316,6 +316,29 @@ async function pushLinksToSupabase(source, links) {
   log('ok', `${source}: отправлено в Supabase ${newRows.length} новых ссылок (всего собрали ${rows.length})`);
 }
 
+async function fetchAvitoCookies() {
+  if (!supabase || !SAVE_TO_DB) return null;
+  const { data, error } = await supabase
+    .from('avito_cookies')
+    .select('cookies')
+    .eq('id', AVITO_COOKIES_ID)
+    .maybeSingle();
+  if (error) {
+    log('err', `AVITO: ошибка чтения cookies: ${error.message}`);
+    return null;
+  }
+  return data?.cookies || null;
+}
+
+async function saveAvitoCookies(cookies, blocked) {
+  if (!supabase || !SAVE_TO_DB) return;
+  const payload = { id: AVITO_COOKIES_ID, cookies, blocked: !!blocked };
+  const { error } = await supabase.from('avito_cookies').upsert(payload, { onConflict: 'id' });
+  if (error) {
+    log('err', `AVITO: ошибка записи cookies: ${error.message}`);
+  }
+}
+
 async function runCian() {
   const collectedErrors = [];
   const pageSummaries = [];
@@ -459,6 +482,8 @@ async function getPaginationInfoAvito(page) {
 async function runAvito() {
   const collectedErrors = [];
   const pageSummaries = [];
+  let blocked = false;
+  const initialCookies = await fetchAvitoCookies();
   const chromePath = await getChromePath();
   log('start', 'AVITO: запускаю браузер...');
   const proxy = AVITO_PROXY ? { server: AVITO_PROXY } : undefined;
@@ -486,6 +511,10 @@ async function runAvito() {
     },
     storageState: stateExists ? AVITO_STATE_PATH : undefined
   });
+
+  if (initialCookies?.length) {
+    await context.addCookies(initialCookies).catch(() => {});
+  }
 
   const page = await context.newPage();
   attachErrorLogging(page, collectedErrors);
@@ -532,6 +561,7 @@ async function runAvito() {
     try {
       await waitForResultsAvito(page, AVITO_CARD_SELECTOR);
     } catch (err) {
+      blocked = true;
       collectedErrors.push(`Не дождался карточек на Avito (страница ${pageIndex}): ${err.message}`);
       await dumpPageState(page, 'AVITO');
       break;
@@ -600,6 +630,7 @@ async function runAvito() {
   }
 
   await pushLinksToSupabase('AVITO', links);
+  await saveAvitoCookies(await context.cookies(), blocked);
   await browser.close();
   log('ok', 'AVITO: браузер закрыт.');
   await context.storageState({ path: AVITO_STATE_PATH }).catch(() => {});
