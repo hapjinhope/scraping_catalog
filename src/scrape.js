@@ -392,7 +392,7 @@ async function runCian() {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
   });
 
-  log('info', 'CIAN: открываю ленту...');
+  log('info', 'CIAN: лента...');
   await page.goto(CIAN_SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 120000 }).catch((err) => {
     throw new Error(`Не удалось открыть страницу: ${err.message}`);
   });
@@ -409,9 +409,9 @@ async function runCian() {
   const perPageTarget = CIAN_PAGE === 0 && !CIAN_ALL ? ITEMS_LIMIT : 60;
 
   while (pageIndex <= targetPages) {
-    log('info', `CIAN: страница ${pageIndex}: жду карточки...`);
+    log('info', `CIAN: стр ${pageIndex} — жду...`);
     await waitForResults(page);
-    log('info', `CIAN: страница ${pageIndex}: скроллю и собираю...`);
+    log('info', `CIAN: стр ${pageIndex} — собираю...`);
     await autoScroll(page, perPageTarget, CIAN_CARD_SELECTOR);
     if (SAVE_LOCAL) {
       await page.screenshot({
@@ -448,7 +448,7 @@ async function runCian() {
     pageIndex += 1;
     if (pageIndex > targetPages) break;
     const absolute = nextHref.startsWith('http') ? nextHref : `https://www.cian.ru${nextHref}`;
-    log('info', `CIAN: переход на страницу ${pageIndex}: ${absolute}`);
+    log('info', `CIAN: -> стр ${pageIndex}`);
     await page.goto(absolute, { waitUntil: 'domcontentloaded', timeout: 120000 });
   }
 
@@ -467,8 +467,6 @@ async function runCian() {
   } else {
     log('ok', `CIAN: собрано ${allCards.length} объявлений`);
   }
-
-  links.forEach((link) => log('info', `🔗 ${link}`));
 
   if (allCards.length === 0 && collectedErrors.length > 0) {
     collectedErrors.forEach((msg) => log('err', msg));
@@ -549,14 +547,14 @@ async function runAvito() {
   });
 
   // Стартуем с главной, чтобы меньше палиться, затем идём на выдачу.
-  log('info', 'AVITO: открываю главную...');
+  log('info', 'AVITO: главная...');
   await page.goto('https://www.avito.ru/', { waitUntil: 'domcontentloaded', timeout: 120000 }).catch((err) => {
     throw new Error(`Не удалось открыть главную Avito: ${err.message}`);
   });
   await humanScroll(page);
   await sleep(randomPause(800, 1800));
 
-  log('info', `AVITO: открываю ленту (мин. цена ${MIN_PRICE})...`);
+  log('info', `AVITO: лента (>=${MIN_PRICE})...`);
   await page.goto(AVITO_SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 120000 }).catch((err) => {
     throw new Error(`Не удалось открыть страницу: ${err.message}`);
   });
@@ -583,7 +581,7 @@ async function runAvito() {
   const perPageTarget = AVITO_PAGE === 0 && !AVITO_ALL ? ITEMS_LIMIT : 60;
 
   while (pageIndex <= targetPages) {
-    log('info', `AVITO: страница ${pageIndex}: жду карточки...`);
+    log('info', `AVITO: стр ${pageIndex} — жду...`);
     try {
       await waitForResultsAvito(page, AVITO_CARD_SELECTOR);
     } catch (err) {
@@ -592,7 +590,7 @@ async function runAvito() {
       await dumpPageState(page, 'AVITO');
       break;
     }
-    log('info', `AVITO: страница ${pageIndex}: скроллю и собираю...`);
+    log('info', `AVITO: стр ${pageIndex} — собираю...`);
     await autoScroll(page, perPageTarget, AVITO_CARD_SELECTOR);
     if (SAVE_LOCAL) {
       await page.screenshot({
@@ -629,7 +627,7 @@ async function runAvito() {
     pageIndex += 1;
     if (pageIndex > targetPages) break;
     const absolute = nextHref.startsWith('http') ? nextHref : `https://www.avito.ru${nextHref}`;
-    log('info', `AVITO: переход на страницу ${pageIndex}: ${absolute}`);
+    log('info', `AVITO: -> стр ${pageIndex}`);
     await page.goto(absolute, { waitUntil: 'domcontentloaded', timeout: 120000 });
   }
 
@@ -648,8 +646,6 @@ async function runAvito() {
   } else {
     log('ok', `AVITO: собрано ${allCards.length} объявлений`);
   }
-
-  links.forEach((link) => log('info', `🔗 ${link}`));
 
   if (allCards.length === 0 && collectedErrors.length > 0) {
     collectedErrors.forEach((msg) => log('err', msg));
