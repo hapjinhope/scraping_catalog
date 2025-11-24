@@ -18,7 +18,8 @@ const SEARCH_URL =
 const CIAN_SEARCH_URL = SEARCH_URL;
 const AVITO_SEARCH_URL =
   process.env.AVITO_URL ||
-  `https://www.avito.ru/moskva/kvartiry/sdam/na_dlitelnyy_srok-ASgBAgICAkSSA8gQ8AeQUg?f=ASgBAgECAkSSA8gQ8AeQUgFFxpoMFnsiZnJvbSI6${MIN_PRICE},%22to%22:0}&s=104&user=1`;
+  // Обычная выдача: Москва, аренда, только собственники, мин. цена, сортировка по новизне.
+  `https://www.avito.ru/moskva/kvartiry/sdam/na_dlitelnyy_srok?user=1&pmin=${MIN_PRICE}&s=104`;
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const OUTPUT_FILE = path.join(DATA_DIR, 'results.json');
@@ -40,7 +41,8 @@ const ITEMS_LIMIT = Number(process.env.ITEMS_LIMIT || 5); // общий лими
 const SAVE_LOCAL = envBool('SAVE_LOCAL', false);
 const HEADLESS = envBool('HEADLESS', true);
 const SAVE_TO_DB = envBool('SAVE_TO_DB', true);
-const AVITO_COOKIES_PROFILE = process.env.AVITO_COOKIES_PROFILE || "main";
+const AVITO_COOKIES_TABLE = process.env.AVITO_COOKIES_TABLE || 'avito_cookies';
+const AVITO_COOKIES_PROFILE = process.env.AVITO_COOKIES_PROFILE || "";
 const AVITO_PROXY = process.env.AVITO_PROXY || process.env.PROXY_URL || '';
 const AVITO_STATE_PATH = path.join(DATA_DIR, 'avito_state.json');
 
@@ -317,14 +319,35 @@ async function pushLinksToSupabase(source, links) {
 }
 
 async function fetchAvitoCookies() {
-  if (!supabase || !SAVE_TO_DB) return null;
-  const base = supabase.from('avito_cookies').select('cookies').eq('profile_name', AVITO_COOKIES_PROFILE);
+  // Забираем куки из Supabase даже если SAVE_TO_DB=false (чтобы авторизоваться).
+  if (!supabase) return null;
+  let base = supabase.from(AVITO_COOKIES_TABLE).select('cookies, blocked');
+  if (AVITO_COOKIES_PROFILE) {
+    base = base.eq('profile_name', AVITO_COOKIES_PROFILE);
+  }
+
+  // Пытаемся взять не заблокированные cookies. Если столбца blocked нет — fallback без него.
   let data = null;
   let error = null;
-  ({ data, error } = await base.eq('blocked', false).maybeSingle());
-  if (error && (error.message || '').includes('blocked')) {
-    ({ data, error } = await base.maybeSingle());
+  ({ data, error } = await base.eq('blocked', false).limit(1).maybeSingle());
+
+  if (error && (error.message || '').toLowerCase().includes('blocked')) {
+    let fallback = supabase.from(AVITO_COOKIES_TABLE).select('cookies');
+    if (AVITO_COOKIES_PROFILE) {
+      fallback = fallback.eq('profile_name', AVITO_COOKIES_PROFILE);
+    }
+    ({ data, error } = await fallback.limit(1).maybeSingle());
   }
+
+  if (error && (error.message || '').toLowerCase().includes('multiple')) {
+    // На всякий случай берём первый без maybeSingle-конфликта.
+    let fallback = supabase.from(AVITO_COOKIES_TABLE).select('cookies').limit(1);
+    if (AVITO_COOKIES_PROFILE) {
+      fallback = fallback.eq('profile_name', AVITO_COOKIES_PROFILE);
+    }
+    ({ data, error } = await fallback.single().catch((e) => ({ data: null, error: e })));
+  }
+
   if (error) {
     log('err', `AVITO: ошибка чтения cookies: ${error.message}`);
     return null;
@@ -334,12 +357,13 @@ async function fetchAvitoCookies() {
 
 async function saveAvitoCookies(cookies, blocked) {
   if (!supabase || !SAVE_TO_DB) return;
-  const payload = { profile_name: AVITO_COOKIES_PROFILE, cookies, blocked: !!blocked };
-  let { error } = await supabase.from('avito_cookies').upsert(payload, { onConflict: 'profile_name' });
+  const payload = AVITO_COOKIES_PROFILE
+    ? { profile_name: AVITO_COOKIES_PROFILE, cookies, blocked: !!blocked }
+    : { cookies, blocked: !!blocked };
+  let { error } = await supabase.from(AVITO_COOKIES_TABLE).upsert(payload, { onConflict: AVITO_COOKIES_PROFILE ? 'profile_name' : undefined });
   if (error && (error.message || '').includes('blocked')) {
-    const res = await supabase
-      .from('avito_cookies')
-      .upsert({ profile_name: AVITO_COOKIES_PROFILE, cookies }, { onConflict: 'profile_name' });
+    const payload2 = AVITO_COOKIES_PROFILE ? { profile_name: AVITO_COOKIES_PROFILE, cookies } : { cookies };
+    const res = await supabase.from(AVITO_COOKIES_TABLE).upsert(payload2, { onConflict: AVITO_COOKIES_PROFILE ? 'profile_name' : undefined });
     error = res.error;
   }
   if (error) {
@@ -521,7 +545,8 @@ async function runAvito() {
   });
 
   if (initialCookies?.length) {
-    await context.addCookies(initialCookies).catch(() => {});
+    await context.addCookies(initialCookies).catch((err) => log('warn', `AVITO: не удалось добавить cookies из Supabase: ${err.message}`));
+    log('info', `AVITO: применены cookies из Supabase (${initialCookies.length} шт.)`);
   }
 
   const page = await context.newPage();
@@ -639,9 +664,14 @@ async function runAvito() {
 
   await pushLinksToSupabase('AVITO', links);
   await saveAvitoCookies(await context.cookies(), blocked);
+
+  // Сохраняем стейт до закрытия браузера, чтобы перезаписать cookies для следующего запуска.
+  await context
+    .storageState({ path: AVITO_STATE_PATH })
+    .catch((err) => log('warn', `AVITO: не удалось сохранить state: ${err.message}`));
+
   await browser.close();
   log('ok', 'AVITO: браузер закрыт.');
-  await context.storageState({ path: AVITO_STATE_PATH }).catch(() => {});
 
   return {
     logSummary: `AVITO итого: ${allCards.length} ссылок, страниц ${pageSummaries.length}`
