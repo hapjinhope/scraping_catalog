@@ -361,11 +361,28 @@ async function saveAvitoCookies(cookies, blocked) {
   const payload = { profile_name: AVITO_COOKIES_PROFILE, cookies, blocked: !!blocked };
   let { error } = await supabase.from(AVITO_COOKIES_TABLE).upsert(payload, { onConflict: 'profile_name' });
   if (error && (error.message || '').includes('blocked')) {
-    const res = await supabase.from(AVITO_COOKIES_TABLE).upsert(
-      { profile_name: AVITO_COOKIES_PROFILE, cookies },
-      { onConflict: 'profile_name' }
-    );
+    const res = await supabase
+      .from(AVITO_COOKIES_TABLE)
+      .upsert({ profile_name: AVITO_COOKIES_PROFILE, cookies }, { onConflict: 'profile_name' });
     error = res.error;
+  }
+  if (error && (error.message || '').toLowerCase().includes('on conflict')) {
+    // Нет уникального индекса: удаляем профиль и вставляем заново.
+    log('warn', `AVITO: нет индекса для onConflict, перезаписываю вручную (${error.message})`);
+    const { error: delErr } = await supabase
+      .from(AVITO_COOKIES_TABLE)
+      .delete()
+      .eq('profile_name', AVITO_COOKIES_PROFILE);
+    if (delErr) {
+      log('err', `AVITO: ошибка удаления старых cookies: ${delErr.message}`);
+      return;
+    }
+    const { error: insErr } = await supabase.from(AVITO_COOKIES_TABLE).insert(payload);
+    if (insErr) {
+      log('err', `AVITO: ошибка вставки cookies: ${insErr.message}`);
+      return;
+    }
+    return;
   }
   if (error) {
     log('err', `AVITO: ошибка записи cookies: ${error.message}`);
