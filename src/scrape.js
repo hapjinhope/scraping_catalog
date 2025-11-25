@@ -192,9 +192,14 @@ async function collectAvitoCards(page) {
     })
   );
 
+  const normalizedItems = items.map((item) => ({
+    ...item,
+    link: normalizeAvitoLink(item.link)
+  }));
+
   const unique = [];
   const seen = new Set();
-  for (const item of items) {
+  for (const item of normalizedItems) {
     if (item.priceValue !== null && item.priceValue < MIN_PRICE) continue;
     const key = item.link || item.title;
     if (!key || seen.has(key)) continue;
@@ -248,6 +253,17 @@ function sleep(ms) {
 const AVITO_ALLOWED_COOKIE_DOMAINS = ['avito.ru', '.avito.ru', 'www.avito.ru', '.www.avito.ru'];
 function filterAvitoCookies(cookies = []) {
   return cookies.filter((c) => AVITO_ALLOWED_COOKIE_DOMAINS.some((d) => c.domain?.endsWith(d)));
+}
+
+function normalizeAvitoLink(link) {
+  if (!link) return link;
+  try {
+    const url = new URL(link);
+    if (!url.hostname.includes('avito.ru')) return link;
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return link;
+  }
 }
 
 async function sendTelegramLog(message) {
