@@ -46,6 +46,9 @@ const AVITO_COOKIES_TABLE = process.env.AVITO_COOKIES_TABLE || 'avito_cookies';
 const AVITO_COOKIES_PROFILE = process.env.AVITO_COOKIES_PROFILE || 'main';
 const AVITO_PROXY = process.env.AVITO_PROXY || process.env.PROXY_URL || '';
 const AVITO_STATE_PATH = path.join(DATA_DIR, 'avito_state.json');
+const TELEGRAM_LOG_BOT_TOKEN = process.env.TELEGRAM_LOG_BOT_TOKEN;
+const TELEGRAM_LOG_CHAT_ID = process.env.TELEGRAM_LOG_CHAT_ID;
+const TELEGRAM_LOG_TOPIC_ID = process.env.TELEGRAM_LOG_TOPIC_ID;
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
@@ -239,6 +242,25 @@ function randomPause(min = 200, max = 800) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function sendTelegramLog(message) {
+  if (!TELEGRAM_LOG_BOT_TOKEN || !TELEGRAM_LOG_CHAT_ID) return;
+  const url = `https://api.telegram.org/bot${TELEGRAM_LOG_BOT_TOKEN}/sendMessage`;
+  const payload = {
+    chat_id: TELEGRAM_LOG_CHAT_ID,
+    text: message,
+    message_thread_id: TELEGRAM_LOG_TOPIC_ID ? Number(TELEGRAM_LOG_TOPIC_ID) : undefined
+  };
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    log('warn', `Telegram log failed: ${err.message}`);
+  }
 }
 
 function log(kind, message) {
@@ -718,6 +740,10 @@ async function runAvito() {
 
   await browser.close();
   log('ok', 'AVITO: браузер закрыт.');
+
+  if (blocked) {
+    await sendTelegramLog('🚫 Avito: блок/капча, куки помечены как blocked=true. Проверьте IP/куки.');
+  }
 
   return {
     logSummary: `AVITO итого: ${allCards.length} ссылок, страниц ${pageSummaries.length}`
