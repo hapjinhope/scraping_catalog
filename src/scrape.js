@@ -650,6 +650,12 @@ async function runAvito() {
       });
     }
     const cards = await collectAvitoCards(page);
+    if (!cards.length) {
+      blocked = true;
+      collectedErrors.push(`Avito: карточки не найдены на странице ${pageIndex}`);
+      await dumpPageState(page, 'AVITO_EMPTY');
+      break;
+    }
     const addedLinks = [];
     for (const card of cards) {
       const key = card.link || card.title;
