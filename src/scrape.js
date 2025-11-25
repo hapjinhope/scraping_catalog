@@ -244,6 +244,11 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const AVITO_ALLOWED_COOKIE_DOMAINS = ['avito.ru', '.avito.ru', 'www.avito.ru', '.www.avito.ru'];
+function filterAvitoCookies(cookies = []) {
+  return cookies.filter((c) => AVITO_ALLOWED_COOKIE_DOMAINS.some((d) => c.domain?.endsWith(d)));
+}
+
 async function sendTelegramLog(message) {
   if (!TELEGRAM_LOG_BOT_TOKEN || !TELEGRAM_LOG_CHAT_ID) return;
   const url = `https://api.telegram.org/bot${TELEGRAM_LOG_BOT_TOKEN}/sendMessage`;
@@ -378,17 +383,24 @@ async function fetchAvitoCookies() {
     log('err', `AVITO: ошибка чтения cookies: ${error.message}`);
     return null;
   }
-  return data?.cookies || null;
+  const cleaned = filterAvitoCookies(data?.cookies || []);
+  if (!cleaned.length) return null;
+  return cleaned;
 }
 
 async function saveAvitoCookies(cookies, blocked) {
   if (!supabase || !SAVE_TO_DB) return;
-  const payload = { profile_name: AVITO_COOKIES_PROFILE, cookies, blocked: !!blocked };
+  const cleaned = filterAvitoCookies(cookies);
+  if (!cleaned.length) {
+    log('warn', 'AVITO: нет подходящих cookies для сохранения (фильтр по доменам)');
+    return;
+  }
+  const payload = { profile_name: AVITO_COOKIES_PROFILE, cookies: cleaned, blocked: !!blocked };
   let { error } = await supabase.from(AVITO_COOKIES_TABLE).upsert(payload, { onConflict: 'profile_name' });
   if (error && (error.message || '').includes('blocked')) {
     const res = await supabase
       .from(AVITO_COOKIES_TABLE)
-      .upsert({ profile_name: AVITO_COOKIES_PROFILE, cookies }, { onConflict: 'profile_name' });
+      .upsert({ profile_name: AVITO_COOKIES_PROFILE, cookies: cleaned }, { onConflict: 'profile_name' });
     error = res.error;
   }
   const errMsg = (error?.message || '').toLowerCase();
@@ -403,7 +415,7 @@ async function saveAvitoCookies(cookies, blocked) {
       log('err', `AVITO: ошибка удаления старых cookies: ${delErr.message}`);
       return;
     }
-    const { error: insErr } = await supabase.from(AVITO_COOKIES_TABLE).insert({ cookies, blocked: !!blocked });
+    const { error: insErr } = await supabase.from(AVITO_COOKIES_TABLE).insert({ cookies: cleaned, blocked: !!blocked });
     if (insErr) {
       log('err', `AVITO: ошибка вставки cookies: ${insErr.message}`);
       return;
@@ -423,7 +435,7 @@ async function saveAvitoCookies(cookies, blocked) {
       return;
     }
     const insertPayload = error.message.toLowerCase().includes('profile_name')
-      ? { cookies, blocked: !!blocked }
+      ? { cookies: cleaned, blocked: !!blocked }
       : payload;
     const { error: insErr } = await supabase.from(AVITO_COOKIES_TABLE).insert(insertPayload);
     if (insErr) {
