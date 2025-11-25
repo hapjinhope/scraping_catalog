@@ -373,7 +373,10 @@ async function saveAvitoCookies(cookies, blocked) {
 
   if (error && errMsg.includes('profile_name')) {
     log('warn', `AVITO: нет колонки profile_name, перезаписываю все строки (${error.message})`);
-    const { error: delErr } = await supabase.from(AVITO_COOKIES_TABLE).delete();
+    const { error: delErr } = await supabase
+      .from(AVITO_COOKIES_TABLE)
+      .delete()
+      .not('id', 'is', null);
     if (delErr) {
       log('err', `AVITO: ошибка удаления старых cookies: ${delErr.message}`);
       return;
