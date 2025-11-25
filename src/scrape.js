@@ -391,61 +391,37 @@ async function fetchAvitoCookies() {
 async function saveAvitoCookies(cookies, blocked) {
   if (!supabase || !SAVE_TO_DB) return;
   const cleaned = filterAvitoCookies(cookies);
+  if (!blocked) {
+    log('info', 'AVITO: блок не обнаружен, куки не перезаписываю.');
+    return;
+  }
   if (!cleaned.length) {
-    log('warn', 'AVITO: нет подходящих cookies для сохранения (фильтр по доменам)');
-    return;
+    log('warn', 'AVITO: нет подходящих cookies для сохранения (фильтр по доменам), blocked отмечаю без куков.');
   }
-  const payload = { profile_name: AVITO_COOKIES_PROFILE, cookies: cleaned, blocked: !!blocked };
-  let { error } = await supabase.from(AVITO_COOKIES_TABLE).upsert(payload, { onConflict: 'profile_name' });
-  if (error && (error.message || '').includes('blocked')) {
-    const res = await supabase
-      .from(AVITO_COOKIES_TABLE)
-      .upsert({ profile_name: AVITO_COOKIES_PROFILE, cookies: cleaned }, { onConflict: 'profile_name' });
-    error = res.error;
-  }
+
+  // Меняем только флаг blocked, куки не трогаем.
+  let { error } = await supabase
+    .from(AVITO_COOKIES_TABLE)
+    .update({ blocked: true })
+    .eq('profile_name', AVITO_COOKIES_PROFILE);
+
   const errMsg = (error?.message || '').toLowerCase();
-
   if (error && errMsg.includes('profile_name')) {
-    log('warn', `AVITO: нет колонки profile_name, перезаписываю все строки (${error.message})`);
-    const { error: delErr } = await supabase
-      .from(AVITO_COOKIES_TABLE)
-      .delete()
-      .not('id', 'is', null);
-    if (delErr) {
-      log('err', `AVITO: ошибка удаления старых cookies: ${delErr.message}`);
-      return;
-    }
-    const { error: insErr } = await supabase.from(AVITO_COOKIES_TABLE).insert({ cookies: cleaned, blocked: !!blocked });
-    if (insErr) {
-      log('err', `AVITO: ошибка вставки cookies: ${insErr.message}`);
-      return;
+    log('warn', `AVITO: нет колонки profile_name, отмечаю blocked=true для всех записей (${error.message})`);
+    const { error: updErr } = await supabase.from(AVITO_COOKIES_TABLE).update({ blocked: true }).not('id', 'is', null);
+    if (updErr) {
+      log('err', `AVITO: ошибка обновления blocked: ${updErr.message}`);
     }
     return;
   }
-
-  if (error && errMsg.includes('on conflict')) {
-    // Нет уникального индекса или нет profile_name: удаляем старые записи и вставляем одну.
-    log('warn', `AVITO: нет индекса для onConflict, перезаписываю вручную (${error.message})`);
-    const delQuery = supabase.from(AVITO_COOKIES_TABLE).delete();
-    const { error: delErr } = await (error.message.toLowerCase().includes('profile_name')
-      ? delQuery
-      : delQuery.eq('profile_name', AVITO_COOKIES_PROFILE));
-    if (delErr) {
-      log('err', `AVITO: ошибка удаления старых cookies: ${delErr.message}`);
-      return;
-    }
-    const insertPayload = error.message.toLowerCase().includes('profile_name')
-      ? { cookies: cleaned, blocked: !!blocked }
-      : payload;
-    const { error: insErr } = await supabase.from(AVITO_COOKIES_TABLE).insert(insertPayload);
-    if (insErr) {
-      log('err', `AVITO: ошибка вставки cookies: ${insErr.message}`);
-      return;
-    }
+  if (error && errMsg.includes('no rows')) {
+    log('warn', 'AVITO: нет записей для обновления blocked=true, пропускаю.');
     return;
   }
   if (error) {
-    log('err', `AVITO: ошибка записи cookies: ${error.message}`);
+    log('err', `AVITO: ошибка обновления blocked: ${error.message}`);
+  } else {
+    log('info', 'AVITO: пометил blocked=true для текущего профиля.');
   }
 }
 
