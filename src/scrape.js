@@ -42,6 +42,7 @@ const SAVE_LOCAL = envBool('SAVE_LOCAL', false);
 const HEADLESS = envBool('HEADLESS', true);
 const SAVE_TO_DB = envBool('SAVE_TO_DB', true);
 const AVITO_COOKIES_TABLE = process.env.AVITO_COOKIES_TABLE || 'avito_cookies';
+const AVITO_COOKIES_NAME = process.env.AVITO_COOKIES_NAME || 'catalog';
 // Если в таблице нет profile_name, будем работать без него.
 const AVITO_COOKIES_PROFILE = process.env.AVITO_COOKIES_PROFILE || 'main';
 const AVITO_PROXY = process.env.AVITO_PROXY || process.env.PROXY_URL || '';
@@ -357,34 +358,75 @@ async function pushLinksToSupabase(source, links) {
 async function fetchAvitoCookies() {
   // Забираем куки из Supabase даже если SAVE_TO_DB=false (чтобы авторизоваться).
   if (!supabase) return null;
-  let base = supabase.from(AVITO_COOKIES_TABLE).select('cookies, blocked, profile_name');
-  base = base.eq('profile_name', AVITO_COOKIES_PROFILE);
+  async function fetchAvitoCookiesByProfile() {
+    if (!AVITO_COOKIES_PROFILE) return null;
+    let base = supabase.from(AVITO_COOKIES_TABLE).select('cookies, blocked');
+    try {
+      base = base.eq('profile_name', AVITO_COOKIES_PROFILE);
+    } catch {
+      // eq вызовет ошибку только при запросе, поэтому просто идём дальше.
+    }
 
-  // Пытаемся взять не заблокированные cookies. Если столбца blocked нет — fallback без него.
-  let data = null;
-  let error = null;
-  ({ data, error } = await base.eq('blocked', false).limit(1).maybeSingle());
+    let data = null;
+    let error = null;
+    ({ data, error } = await base.eq('blocked', false).limit(1).maybeSingle());
+    let message = (error?.message || '').toLowerCase();
 
-  const message = (error?.message || '').toLowerCase();
+    if (error && (message.includes('profile_name') || message.includes('blocked'))) {
+      // Если нет profile_name/blocked — пробуем просто взять первую запись.
+      let fallback = supabase.from(AVITO_COOKIES_TABLE).select('cookies').limit(1);
+      ({ data, error } = await fallback.maybeSingle());
+      message = (error?.message || '').toLowerCase();
+    }
 
-  if (error && (message.includes('blocked') || message.includes('profile_name'))) {
-    // Если нет столбца blocked/profile_name — пробуем без этих полей.
-    let fallback = supabase.from(AVITO_COOKIES_TABLE).select('cookies, blocked').limit(1);
-    ({ data, error } = await fallback.maybeSingle());
+    if (error) {
+      log('err', `AVITO: ошибка чтения cookies (profile fallback): ${error.message}`);
+      return null;
+    }
+
+    if (!data && !error) return null;
+
+    const cleaned = filterAvitoCookies(data?.cookies || []);
+    if (!cleaned.length) return null;
+    log('info', `AVITO: куки взяты из Supabase по profile_name="${AVITO_COOKIES_PROFILE}" (${cleaned.length} шт.)`);
+    return cleaned;
   }
 
-  if (error && message.includes('multiple')) {
-    // На всякий случай берём первый без maybeSingle-конфликта.
-    let fallback = supabase.from(AVITO_COOKIES_TABLE).select('cookies').limit(1);
-    ({ data, error } = await fallback.single().catch((e) => ({ data: null, error: e })));
+  let data = null;
+  let error = null;
+  let query = supabase
+    .from(AVITO_COOKIES_TABLE)
+    .select('cookies, blocked, name')
+    .eq('name', AVITO_COOKIES_NAME);
+
+  ({ data, error } = await query.eq('blocked', false).limit(1).maybeSingle());
+  let message = (error?.message || '').toLowerCase();
+
+  if (error && message.includes('blocked')) {
+    // Если нет столбца blocked — пробуем без фильтра по нему.
+    query = supabase.from(AVITO_COOKIES_TABLE).select('cookies, name').eq('name', AVITO_COOKIES_NAME);
+    ({ data, error } = await query.limit(1).maybeSingle());
+    message = (error?.message || '').toLowerCase();
+  }
+
+  if (error && message.includes('name')) {
+    log('warn', 'AVITO: колонка name недоступна, пробую искать cookies по profile_name.');
+    return fetchAvitoCookiesByProfile();
+  }
+
+  if ((!data && !error) || message.includes('no rows')) {
+    log('warn', `AVITO: запись с name="${AVITO_COOKIES_NAME}" не найдена, fallback на profile_name="${AVITO_COOKIES_PROFILE}".`);
+    return fetchAvitoCookiesByProfile();
   }
 
   if (error) {
-    log('err', `AVITO: ошибка чтения cookies: ${error.message}`);
+    log('err', `AVITO: ошибка чтения cookies по name="${AVITO_COOKIES_NAME}": ${error.message}`);
     return null;
   }
+
   const cleaned = filterAvitoCookies(data?.cookies || []);
   if (!cleaned.length) return null;
+  log('info', `AVITO: куки взяты из Supabase по name="${AVITO_COOKIES_NAME}" (${cleaned.length} шт.)`);
   return cleaned;
 }
 
@@ -400,12 +442,24 @@ async function saveAvitoCookies(cookies, blocked) {
   }
 
   // Меняем только флаг blocked, куки не трогаем.
+  let usedProfileFallback = false;
   let { error } = await supabase
     .from(AVITO_COOKIES_TABLE)
     .update({ blocked: true })
-    .eq('profile_name', AVITO_COOKIES_PROFILE);
+    .eq('name', AVITO_COOKIES_NAME);
 
-  const errMsg = (error?.message || '').toLowerCase();
+  let errMsg = (error?.message || '').toLowerCase();
+  if (error && errMsg.includes('name')) {
+    log('warn', `AVITO: нет колонки name, пробую обновить blocked по profile_name="${AVITO_COOKIES_PROFILE}".`);
+    usedProfileFallback = true;
+    let fallback = supabase.from(AVITO_COOKIES_TABLE).update({ blocked: true });
+    if (AVITO_COOKIES_PROFILE) {
+      fallback = fallback.eq('profile_name', AVITO_COOKIES_PROFILE);
+    }
+    ({ error } = await fallback);
+    errMsg = (error?.message || '').toLowerCase();
+  }
+
   if (error && errMsg.includes('profile_name')) {
     log('warn', `AVITO: нет колонки profile_name, отмечаю blocked=true для всех записей (${error.message})`);
     const { error: updErr } = await supabase.from(AVITO_COOKIES_TABLE).update({ blocked: true }).not('id', 'is', null);
@@ -421,7 +475,10 @@ async function saveAvitoCookies(cookies, blocked) {
   if (error) {
     log('err', `AVITO: ошибка обновления blocked: ${error.message}`);
   } else {
-    log('info', 'AVITO: пометил blocked=true для текущего профиля.');
+    const target = usedProfileFallback
+      ? `profile_name="${AVITO_COOKIES_PROFILE}"`
+      : `name="${AVITO_COOKIES_NAME}"`;
+    log('info', `AVITO: пометил blocked=true для ${target}.`);
   }
 }
 

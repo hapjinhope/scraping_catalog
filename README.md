@@ -19,6 +19,8 @@ npm start
 - `SAVE_LOCAL` — true: сохранять `data/*.json` и скриншоты; false: ничего не пишет.
 - `HEADLESS` — true|false (headless режим браузера).
 - `SUPABASE_URL`, `SUPABASE_KEY` — при наличии ссылки отправляются в таблицу `owners` (поля `url`, `parsed=false`).
+- `AVITO_COOKIES_TABLE` — таблица с куками Avito (по умолчанию `avito_cookies`).
+- `AVITO_COOKIES_NAME` — значение колонки `name`, по которой вытаскиваем куки для парсера каталога (по умолчанию `catalog`). Фолбек — поиск по `profile_name`.
 
 ## Railway / Cron
 1. Задайте переменные окружения (см. выше). Для Railway обычно `SAVE_LOCAL=false`, `HEADLESS=true`.
